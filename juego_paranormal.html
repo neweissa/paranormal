@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Archivo Paranormal</title>
+<link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --noche: #151a33;
+    --papel: #ece8f2;
+    --tinta: #1d1a2b;
+    --ambar: #e8a93b;
+    --acierto: #2f8f6b;
+    --error: #b8315f;
+    --apagado: #6b6784;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(ellipse at top, #232a55 0%, var(--noche) 60%);
+    color: var(--papel);
+    font-family: "Atkinson Hyperlegible", system-ui, sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 24px 16px;
+  }
+  main { width: 100%; max-width: 640px; }
+  h1 {
+    font-family: "Special Elite", "Courier New", monospace;
+    font-weight: 400;
+    font-size: clamp(2rem, 6vw, 3rem);
+    margin: 0 0 4px;
+    letter-spacing: 0.02em;
+  }
+  .sub { margin: 0 0 24px; color: #b9b5d1; }
+  .barra {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    font-weight: 700;
+  }
+  .expediente {
+    background: var(--papel);
+    color: var(--tinta);
+    border-radius: 6px;
+    padding: 24px;
+    border-top: 8px solid var(--ambar);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  }
+  .expediente h2 {
+    font-family: "Special Elite", "Courier New", monospace;
+    font-weight: 400;
+    font-size: 1.5rem;
+    margin: 0 0 12px;
+  }
+  .datos { margin: 0 0 12px; color: var(--apagado); font-weight: 700; }
+  .descripcion { font-size: 1.15rem; line-height: 1.5; margin: 0 0 20px; }
+  .pregunta { font-weight: 700; margin: 0 0 10px; }
+  .opciones { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  button {
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    border: 2px solid var(--tinta);
+    background: #fff;
+    color: var(--tinta);
+    padding: 14px 10px;
+    border-radius: 6px;
+    transition: transform 0.1s;
+  }
+  button:hover:enabled { transform: translateY(-2px); background: #f6efdc; }
+  button:focus-visible { outline: 3px solid var(--ambar); outline-offset: 2px; }
+  button:disabled { cursor: default; }
+  button.bien { background: var(--acierto); border-color: var(--acierto); color: #fff; }
+  button.mal { background: var(--error); border-color: var(--error); color: #fff; }
+  .resultado { margin-top: 18px; display: none; }
+  .resultado.visible { display: block; }
+  .resultado p { margin: 0 0 8px; }
+  .peligro { display: flex; align-items: center; gap: 6px; margin-bottom: 14px; }
+  .punto { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--tinta); }
+  .punto.lleno { background: var(--error); border-color: var(--error); }
+  .siguiente { background: var(--tinta); color: #fff; width: 100%; }
+  .siguiente:hover:enabled { background: #2d2947; }
+  .final { text-align: center; }
+  .final .puntos { font-family: "Special Elite", "Courier New", monospace; font-size: 3rem; margin: 8px 0; }
+  .aviso { background: var(--papel); color: var(--tinta); border-radius: 6px; padding: 20px; line-height: 1.5; }
+  .aviso code { background: #d8d3e6; padding: 2px 6px; border-radius: 3px; }
+  @media (prefers-reduced-motion: reduce) { button { transition: none; } }
+  @media (max-width: 420px) { .opciones { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Archivo Paranormal</h1>
+  <p class="sub">Lee cada caso y clasifícalo en la categoría correcta.</p>
+  <div id="juego"></div>
+</main>
+
+<script>
+  // ====== 1. PEGA AQUÍ TUS DATOS DE SUPABASE ======
+  const SUPABASE_URL = "https://zzutsuutwssxhkklrnny.supabase.co";      // ejemplo: https://abcdxyz.supabase.co
+  const SUPABASE_KEY = "sb_publishable_H9-5d-Qxcm-JSr3fvxsOGA_jOWF8xjm";    // clave "anon" o "publishable"
+  // ================================================
+
+  const juego = document.getElementById("juego");
+  let casos = [];
+  let categorias = [];
+  let indice = 0;
+  let puntos = 0;
+
+  function mostrarAviso(html) {
+    juego.innerHTML = '<div class="aviso">' + html + "</div>";
+  }
+
+  async function pedir(ruta) {
+    const respuesta = await fetch(SUPABASE_URL + "/rest/v1/" + ruta, {
+      headers: { apikey: SUPABASE_KEY }
+    });
+    if (!respuesta.ok) throw new Error("Error " + respuesta.status);
+    return respuesta.json();
+  }
+
+  function mezclar(lista) {
+    const copia = lista.slice();
+    for (let i = copia.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copia[i], copia[j]] = [copia[j], copia[i]];
+    }
+    return copia;
+  }
+
+  async function iniciar() {
+    if (SUPABASE_URL.includes("TU_") || SUPABASE_KEY.includes("TU_")) {
+      mostrarAviso("Falta conectar la base de datos. Abre este archivo y cambia <code>TU_URL_AQUI</code> y <code>TU_CLAVE_AQUI</code> por los datos de tu proyecto Supabase.");
+      return;
+    }
+    mostrarAviso("Abriendo el archivo…");
+    try {
+      const [eventos, cats] = await Promise.all([
+        pedir("events?select=id,title,location,year,description,danger_level,categories(name)"),
+        pedir("categories?select=name&order=name")
+      ]);
+      if (eventos.length === 0) {
+        mostrarAviso("La tabla <code>events</code> está vacía. Revisa que insertaste los datos en Supabase.");
+        return;
+      }
+      casos = mezclar(eventos);
+      categorias = cats.map(function (c) { return c.name; });
+      indice = 0;
+      puntos = 0;
+      mostrarCaso();
+    } catch (error) {
+      mostrarAviso("No se pudo leer la base de datos (" + error.message + "). Revisa la URL, la clave y que hayas ejecutado el Paso 4 de permisos.");
+    }
+  }
+
+  function mostrarCaso() {
+    const caso = casos[indice];
+    juego.innerHTML = "";
+
+    const barra = document.createElement("div");
+    barra.className = "barra";
+    barra.innerHTML = "<span>Caso " + (indice + 1) + " de " + casos.length + "</span><span>Puntos: " + puntos + "</span>";
+
+    const ficha = document.createElement("section");
+    ficha.className = "expediente";
+
+    const titulo = document.createElement("h2");
+    titulo.textContent = "Expediente sin nombre";
+
+    const datos = document.createElement("p");
+    datos.className = "datos";
+    datos.textContent = caso.location + ", " + caso.year;
+
+    const descripcion = document.createElement("p");
+    descripcion.className = "descripcion";
+    descripcion.textContent = caso.description;
+
+    const pregunta = document.createElement("p");
+    pregunta.className = "pregunta";
+    pregunta.textContent = "¿Qué tipo de fenómeno es?";
+
+    const opciones = document.createElement("div");
+    opciones.className = "opciones";
+
+    const resultado = document.createElement("div");
+    resultado.className = "resultado";
+
+    categorias.forEach(function (nombre) {
+      const boton = document.createElement("button");
+      boton.textContent = nombre;
+      boton.addEventListener("click", function () {
+        responder(boton, nombre, caso, opciones, resultado, titulo);
+      });
+      opciones.appendChild(boton);
+    });
+
+    ficha.append(titulo, datos, descripcion, pregunta, opciones, resultado);
+    juego.append(barra, ficha);
+  }
+
+  function responder(boton, elegida, caso, opciones, resultado, titulo) {
+    const correcta = caso.categories.name;
+    const acerto = elegida === correcta;
+    if (acerto) puntos++;
+
+    opciones.querySelectorAll("button").forEach(function (b) {
+      b.disabled = true;
+      if (b.textContent === correcta) b.classList.add("bien");
+    });
+    if (!acerto) boton.classList.add("mal");
+
+    titulo.textContent = caso.title;
+
+    const mensaje = document.createElement("p");
+    mensaje.innerHTML = acerto
+      ? "<strong>¡Correcto!</strong> Es un caso de tipo " + correcta + "."
+      : "<strong>No era esa.</strong> La respuesta correcta es " + correcta + ".";
+
+    const textoPeligro = document.createElement("p");
+    textoPeligro.textContent = "Nivel de peligro:";
+
+    const peligro = document.createElement("div");
+    peligro.className = "peligro";
+    for (let i = 1; i <= 5; i++) {
+      const punto = document.createElement("span");
+      punto.className = "punto" + (i <= caso.danger_level ? " lleno" : "");
+      peligro.appendChild(punto);
+    }
+
+    const siguiente = document.createElement("button");
+    siguiente.className = "siguiente";
+    siguiente.textContent = indice + 1 < casos.length ? "Siguiente caso" : "Ver resultado";
+    siguiente.addEventListener("click", function () {
+      indice++;
+      if (indice < casos.length) mostrarCaso();
+      else mostrarFinal();
+    });
+
+    resultado.append(mensaje, textoPeligro, peligro, siguiente);
+    resultado.classList.add("visible");
+    siguiente.focus();
+  }
+
+  function mostrarFinal() {
+    juego.innerHTML = "";
+    const ficha = document.createElement("section");
+    ficha.className = "expediente final";
+
+    const titulo = document.createElement("h2");
+    titulo.textContent = "Archivo cerrado";
+
+    const marcador = document.createElement("p");
+    marcador.className = "puntos";
+    marcador.textContent = puntos + " / " + casos.length;
+
+    const frase = document.createElement("p");
+    frase.textContent = puntos === casos.length
+      ? "Resolviste todos los casos. Eres un gran investigador."
+      : puntos >= casos.length / 2
+        ? "Buen trabajo. Todavía quedan misterios por resolver."
+        : "Estos casos son difíciles. Vuelve a intentarlo.";
+
+    const otra = document.createElement("button");
+    otra.className = "siguiente";
+    otra.textContent = "Jugar otra vez";
+    otra.addEventListener("click", iniciar);
+
+    ficha.append(titulo, marcador, frase, otra);
+    juego.appendChild(ficha);
+  }
+
+  iniciar();
+</script>
+</body>
+</html>
